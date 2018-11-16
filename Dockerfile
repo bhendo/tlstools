@@ -1,44 +1,22 @@
-FROM alpine
+FROM python:3.7-slim
 
-WORKDIR /app
+WORKDIR /tools
 
-RUN apk --update add \
-      git \
-      bash \
-      python \
-      py-pip \
-      util-linux \
-      ca-certificates \
-      openssl && \
-    apk --update add --no-cache --virtual .build-deps \
-      build-base \
-      perl \
-      python-dev \
-      zlib-dev \
-      openssl-dev \
-      gmp-dev && \
-    git clone https://github.com/tomato42/tlsfuzzer.git && \
-    pip install --upgrade pip && \
-    pip install --pre six \
-      ecdsa \
-      tlslite-ng  \
-      m2crypto \
-      pycrypto \
-      gmpy && \
+RUN mkdir -p /output && \
+    pip install sslyze && \
+    sslyze --update_trust_stores && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends bsdmainutils && \
+    savedAptMark="$(apt-mark showmanual)" && \
+    apt-get install -y --no-install-recommends git && \
     git clone https://github.com/mozilla/cipherscan.git && \
-    git clone https://github.com/PeterMosmans/openssl.git --depth 1 -b 1.0.2-chacha && \
-    cd openssl && \
-    ./Configure zlib no-shared experimental-jpake enable-md2 enable-rc5 \
-      enable-rfc3779 enable-gost enable-static-engine linux-x86_64 && \
-    make depend && \
-    make && \
-    make report && \
-    cp /app/openssl/apps/openssl /app/cipherscan/openssl && \
-    cd /app/cipherscan && \
-    ./cscan.sh || : && \
-    rm -rf /var/cache/apk/* && \
-    rm -rf /app/openssl && \
-    apk del .build-deps
+    cipherscan/cscan.sh || : && \
+    apt-mark auto '.*' > /dev/null && \
+	  apt-mark manual $savedAptMark && \
+    apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY ./analyze.py /tools/cipherscan/analyze.py
 
 COPY ./docker-entrypoint.sh /
 
